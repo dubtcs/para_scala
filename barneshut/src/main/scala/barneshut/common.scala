@@ -44,31 +44,86 @@ sealed abstract class Quad extends QuadInterface:
   def insert(b: Body): Quad
 
 case class Empty(centerX: Float, centerY: Float, size: Float) extends Quad:
-  def massX: Float = ???
-  def massY: Float = ???
-  def mass: Float = ???
-  def total: Int = ???
-  def insert(b: Body): Quad = ???
+  def massX: Float = centerX
+  def massY: Float = centerY
+  def mass: Float = 0.0
+  def total: Int = 0
+  def insert(b: Body): Quad =
+    Leaf(centerX, centerY, size, Seq(b))
 
 case class Fork(
   nw: Quad, ne: Quad, sw: Quad, se: Quad
 ) extends Quad:
-  val centerX: Float = ???
-  val centerY: Float = ???
-  val size: Float = ???
-  val mass: Float = ???
-  val massX: Float = ???
-  val massY: Float = ???
-  val total: Int = ???
+  val centerX: Float = nw.centerX + (nw.size / 2)
+  val centerY: Float = nw.centerY + (nw.size / 2)
+  val size: Float = nw.size * 2
+  val mass: Float = nw.mass + ne.mass + se.mass + sw.mass
+  val massX: Float =
+    if(nw.isInstanceOf[Empty] && ne.isInstanceOf[Empty] && se.isInstanceOf[Empty] && sw.isInstanceOf[Empty])
+      (nw.massX + ne.massX + se.massX + sw.massX) / 4
+    else
+      Seq(nw, ne, se, sw).foldLeft(0.0f)(
+        (prev: Float, cur: Quad) =>
+          prev + ((cur.mass / mass) * cur.massX)
+      )
+  val massY: Float =
+    if(nw.isInstanceOf[Empty] && ne.isInstanceOf[Empty] && se.isInstanceOf[Empty] && sw.isInstanceOf[Empty])
+      (nw.massY + ne.massY + se.massY + sw.massY) / 4
+    else
+      Seq(nw, ne, se, sw).foldLeft(0.0f)(
+        (prev: Float, cur: Quad) =>
+          prev + ((cur.mass / mass) * cur.massY)
+      )
+  val total: Int = nw.total + ne.total + se.total + sw.total
 
   def insert(b: Body): Fork =
-    ???
+    if(b.x < centerX)
+      if(b.y < centerY)
+        Fork(nw.insert(b), ne, sw, se)
+      else
+        Fork(nw, ne, sw.insert(b), se)
+    else
+      if(b.y < centerY)
+        Fork(nw, ne.insert(b), sw, se)
+      else
+        Fork(nw, ne, sw, se.insert(b))
+//    val quads: Seq[Quad] = Seq(nw, sw, ne, se)
+//    val index: Int = ((if (b.y < centerY) 0 else 2) + (if (b.x < centerX) 0 else 1))
+//    val nq: Quad = quads(index).insert(b)
+//    val nquads: Seq[Quad] = quads.updated(index, nq)
+//    Fork(nquads(0), nquads(2), nquads(1), nquads(3))
 
 case class Leaf(centerX: Float, centerY: Float, size: Float, bodies: coll.Seq[Body])
 extends Quad:
-  val (mass, massX, massY) = (??? : Float, ??? : Float, ??? : Float)
-  val total: Int = ???
-  def insert(b: Body): Quad = ???
+  val mass: Float = bodies.foldLeft(0.0f)(
+    (prev: Float, cur: Body) => prev + cur.mass
+  )
+  val (massX, massY) = bodies.foldLeft((0.0f, 0.0f))(
+    (prev: (Float, Float), cur: Body) =>
+      (
+        prev._1 + ((cur.mass / mass) * cur.x),
+        prev._2 + ((cur.mass / mass) * cur.y),
+      )
+  )
+  val total: Int = bodies.length
+  def insert(b: Body): Quad =
+    if(size > minimumSize)
+      val empties: Seq[Empty] =
+        val quadSize: Float = size * 0.25f // 4 bc the size is being split into quads now
+        val halfSize: Float = size * 0.5f
+        Seq(
+          Empty(centerX - quadSize, centerY - quadSize, halfSize), // 0, 0 CW
+          Empty(centerX + quadSize, centerY - quadSize, halfSize), // 1, 0
+          Empty(centerX - quadSize, centerY + quadSize, halfSize), // 0, 1
+          Empty(centerX + quadSize, centerY + quadSize, halfSize), // 1, 1
+        )
+      val fo: Fork = Fork(empties(0), empties(1), empties(2), empties(3))
+      (bodies :+ b).foldLeft(fo)(
+        (prev: Fork, cur: Body) =>
+          prev.insert(cur)
+      )
+    else
+      Leaf(centerX, centerY, size, bodies :+ b)
 
 def minimumSize = 0.00001f
 
